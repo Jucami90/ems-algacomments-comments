@@ -1,7 +1,10 @@
 package com.algaworks.algacomments.comments.api.controller;
 
+import com.algaworks.algacomments.comments.api.client.ModerationClient;
 import com.algaworks.algacomments.comments.api.model.CommentInput;
 import com.algaworks.algacomments.comments.api.model.CommentOutput;
+import com.algaworks.algacomments.comments.api.model.ModerationInput;
+import com.algaworks.algacomments.comments.api.model.ModerationOutput;
 import com.algaworks.algacomments.comments.domain.model.Comment;
 import com.algaworks.algacomments.comments.domain.repository.CommentRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,16 +21,30 @@ import org.springframework.web.server.ResponseStatusException;
 public class CommentController {
 
     private final CommentRepository commentRepository;
+    private final ModerationClient moderationClient;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CommentOutput createComment(@RequestBody CommentInput input) {
-        Comment comment = Comment.builder()
-                .author(input.getAuthor())
+        ModerationInput moderationInput = ModerationInput.builder()
                 .text(input.getText())
                 .build();
-        comment = commentRepository.save(comment);
-        return convertToModel(comment);
+
+        ModerationOutput moderationOutput =
+                moderationClient.moderateComment(moderationInput);
+
+        if (moderationOutput.isApproved()) {
+            Comment comment = Comment.builder()
+                    .author(input.getAuthor())
+                    .text(input.getText())
+                    .build();
+            comment = commentRepository.save(comment);
+            return convertToModel(comment);
+        }else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Comment not approved: " + moderationOutput.getReason());
+        }
+
     }
 
     @GetMapping("/{id}")
